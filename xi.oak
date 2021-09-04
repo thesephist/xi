@@ -6,17 +6,23 @@
 {
 	println: println
 	slice: slice
+	map: map
 	each: each
 	filter: filter
 	every: every
 	partition: partition
+	entries: entries
 	loop: loop
 } := import('std')
 {
 	digit?: digit?
+	join: join
 	split: split
 	trim: trim
 } := import('str')
+{
+	sort!: sort!
+} := import('sort')
 {
 	printf: printf
 } := import('fmt')
@@ -97,13 +103,33 @@ fn parse(program) {
 	parseTokens([])
 }
 
+// toString converts Xi values to string representations suitable for printing
+// in a REPL environment.
+fn toString(word) if type(word) {
+	:list -> '( ' + word |> map(toString) |> join(' ') + ' )'
+	:object -> if word {
+		{ type: :list, val: _ } -> '[ ' + word.val |> map(toString) |> join(' ') + ' ]'
+		{ type: :object, val: _ } -> '{ ' + word.val |>
+			entries() |>
+			map(fn(entry) {
+				[key, val] := entry
+				toString(key) + ' ' + toString(val)
+			}) |>
+			join(' ') + ' }'
+	}
+	:int, :float -> string(word)
+	:string -> '\'' + word + '\''
+	_ -> string(word)
+}
+
 fn number?(s) s |> split() |> with every() fn(c) c = '.' | digit?(c)
 fn str?(s) s.0 = '\'' & s.(len(s) - 1) = '\''
 
+// literal? reports whether a parsed word represents a Xi value literal
 fn literal?(word) if {
 	word = ? -> false
-	type(word) = :list -> false
 
+	type(word) = :list
 	word = { type: _, val: _ }
 	number?(word)
 	str?(word)
@@ -112,10 +138,12 @@ fn literal?(word) if {
 
 	_ -> false
 }
+
 fn literal(word) if {
+	type(word) = :list -> word
 	word = { type: :list, val: _ } -> {
 		type: :list
-		val: word.val |> each(literal)
+		val: word.val |> map(literal)
 	}
 	// TODO: evaluate each key, value
 	word = { type: :object, val: _ } -> word
@@ -131,9 +159,12 @@ fn eval(words, stack, scope) if words.1 {
 	// evaluate a statement
 	_ -> words |> with each() fn(word) if word {
 		// introspection
-		'.' -> println(stack.pop())
-		'?' -> println(stack.items())
-		'??' -> println(scope)
+		'.' -> println(stack.pop() |> toString())
+		'?' -> println('[ ' + stack.items() |> map(toString) |> join(' ') + ' ]')
+		'??' -> println('{\n' + scope |> entries() |> sort!(fn(pair) pair.0)  |> map(fn(pair) {
+			[key, val] := pair
+			'  ' + toString(key) + ' : ' + toString(pair)
+		}) |> join('\n') + '\n}')
 
 		// stack manipulation
 		'dup' -> stack.push(stack.peek())
@@ -219,10 +250,6 @@ fn eval(words, stack, scope) if words.1 {
 		// literals and definitions
 		_ -> if literal?(word) {
 			true -> literal(word) |> stack.push()
-			// TODO: Xi thinks interpreter-defined words like "swap" are
-			// undefined because they don't exist in scope. Solution is
-			// probably to move all builtins to the scope and store as Oak
-			// functions.
 			_ -> if defn := scope.(word) {
 				? -> printf('Error: unknown word "{{0}}"', word)
 				_ -> defn |> eval(stack, scope)
