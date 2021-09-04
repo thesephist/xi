@@ -282,6 +282,7 @@ stack := Stack()
 	'dip4 : swap ( dip3 ) dip'
 	'drop2 : drop drop'
 	'drop3 : drop2 drop'
+	'dropd : swap drop'
 	'dupd : ( dup ) dip'
 	'dup2 : over over'
 	'dup3 : pick pick pick'
@@ -322,10 +323,14 @@ stack := Stack()
 	'thrice : dup dup ( call ) dip2 ( call ) dip call'
 
 	// stdlib
-	// TODO: make a..b:c using rot4 to bury the increment in the stack 3 levels deep
-	'--push-into-list-and-incr : dupd ( << ) dip2 ( ++ ) dip'
-	'--iterate-if-less : dup2 < ( --push-into-list-and-incr --iterate-if-less ) ( drop2 ) if'
-	'a..b : [ ] -rot --iterate-if-less'
+	// c [x..] a b -> c [x.. a] a+=c b
+	'--push-into-list-and-incr : dupd ( << ) dip2 ( pick + ) dip'
+	// c [x..] a b -> [x..b:c]
+	'--iterate-if-less : dup2 < ( --push-into-list-and-incr --iterate-if-less ) ( drop2 dropd ) if'
+	// a b c -> [a..b:c]
+	'a..b:c : -rot [ ] -rot --iterate-if-less'
+	// a b -> [a..b:1]
+	'a..b : 1 a..b:c'
 	'0..b : 0 swap a..b'
 	'1..b : 1 swap a..b'
 ] |> with each() fn(stmt) stmt |> parse() |> eval(stack, scope)
