@@ -1,0 +1,274 @@
+#!/usr/bin/env oak
+
+// Xi is a minimal concatenative stack programming language that uses Oak types
+// and semantics.
+
+{
+	println: println
+	slice: slice
+	each: each
+	filter: filter
+	every: every
+	partition: partition
+	loop: loop
+} := import('std')
+{
+	digit?: digit?
+	split: split
+	trim: trim
+} := import('str')
+{
+	printf: printf
+} := import('fmt')
+
+fn Stack {
+	// buffer backing the stack
+	mem := []
+	// index points to the next insertion slot
+	index := 0
+
+	fn pop if index {
+		0 -> ?
+		_ -> {
+			index <- index - 1
+			mem.(index)
+		}
+	}
+	fn push(it) {
+		mem.(index) := it
+		index <- index + 1
+	}
+	fn peek if index {
+		0 -> ?
+		_ -> mem.(index - 1)
+	}
+
+	{
+		pop: pop
+		push: push
+		peek: peek
+		clear: fn() index <- 0
+		items: fn() mem |> slice(0, index)
+	}
+}
+
+fn parse(program) {
+	index := 0
+	tokens := program |> split(' ') |> with filter() fn(s) s |> trim() != ''
+
+	fn parseTokens(stmts) if index >= len(tokens) {
+		true -> stmts
+		_ -> if token := tokens.(index) {
+			'(' -> {
+				index <- index + 1
+				parseTokens(stmts << parseTokens([]))
+			}
+			'[' -> {
+				index <- index + 1
+				parseTokens(stmts << {
+					type: :list
+					val: parseTokens([])
+				})
+			}
+			'{' -> {
+				index <- index + 1
+				parseTokens(stmts << {
+					type: :object
+					val: {
+						obj := {}
+						parseTokens([]) |> partition(2) |> with each() fn(pair) {
+							[key, val] := pair
+							obj.(key) := val
+						}
+						obj
+					}
+				})
+			}
+			']', '}', ')' -> {
+				index <- index + 1
+				stmts
+			}
+			_ -> {
+				index <- index + 1
+				parseTokens(stmts << token)
+			}
+		}
+	}
+	parseTokens([])
+}
+
+fn number?(s) s |> split() |> with every() fn(c) c = '.' | digit?(c)
+fn str?(s) s.0 = '\'' & s.(len(s) - 1) = '\''
+
+fn literal?(word) if {
+	word = ? -> false
+	type(word) = :list -> false
+
+	word = { type: _, val: _ }
+	number?(word)
+	str?(word)
+	word = 'true'
+	word = 'false' -> true
+
+	_ -> false
+}
+fn literal(word) if {
+	word = { type: :list, val: _ } -> {
+		type: :list
+		val: word.val |> each(literal)
+	}
+	// TODO: evaluate each key, value
+	word = { type: :object, val: _ } -> word
+	number?(word) -> float(word)
+	str?(word) -> word |> slice(1, len(word) - 1)
+	word = 'true' -> true
+	word = 'false' -> false
+}
+
+fn eval(words, stack, scope) if words.1 {
+	// define a new word
+	':' -> scope.(words.0) := words |> slice(2)
+	// evaluate a statement
+	_ -> words |> with each() fn(word) if word {
+		// introspection
+		'.' -> println(stack.pop())
+		'?' -> println(stack.items())
+		'??' -> println(scope)
+
+		// stack manipulation
+		'dup' -> stack.push(stack.peek())
+		'dip' -> {
+			defn := stack.pop()
+			dipped := stack.pop()
+			defn |> eval(stack, scope)
+			stack.push(dipped)
+		}
+		'drop' -> stack.pop()
+		'swap' -> {
+			a := stack.pop()
+			b := stack.pop()
+			stack.push(a)
+			stack.push(b)
+		}
+		'clear' -> stack.clear()
+
+		// operators
+		'+' -> stack.push(stack.pop() + stack.pop())
+		'-' -> stack.push({
+			tmp := stack.pop()
+			stack.pop() - tmp
+		})
+		'*' -> stack.push(stack.pop() * stack.pop())
+		'/' -> stack.push({
+			tmp := stack.pop()
+			stack.pop() / tmp
+		})
+		'%' -> stack.push({
+			tmp := stack.pop()
+			stack.pop() % tmp
+		})
+		'&' -> stack.push(stack.pop() & stack.pop())
+		'|' -> stack.push(stack.pop() | stack.pop())
+		'^' -> stack.push(stack.pop() ^ stack.pop())
+		'=' -> stack.push(stack.pop() = stack.pop())
+		'<' -> stack.push(stack.pop() > stack.pop())
+		'>' -> stack.push(stack.pop() < stack.pop())
+		'<=' -> stack.push(stack.pop() >= stack.pop())
+		'>=' -> stack.push(stack.pop() <= stack.pop())
+
+		// primitives
+		'if' -> {
+			ifFalse := stack.pop()
+			ifTrue := stack.pop()
+			stack.push(if cond := stack.pop() {
+				true -> ifTrue |> eval(stack, scope)
+				_ -> ifFalse |> eval(stack, scope)
+			})
+		}
+		'apply' -> stack.pop() |> eval(stack, scope)
+		// array and object functions
+		'@' -> {
+			key := stack.pop()
+			if target := stack.pop() {
+				{ type: :list, val: _ } -> stack.push(target.val.(int(key)))
+				{ type: :object, val: _ } -> stack.push(target.val.(key))
+				_ -> {
+					printf('Error: cannot access key {{0}} of {{1}}', key, target)
+				}
+			}
+		}
+		'@:' -> {
+			val := stack.pop()
+			key := stack.pop()
+			if target := stack.peek() {
+				{ type: :list, val: _ } -> target.val.(int(key)) := val
+				{ type: :object, val: _ } -> target.val.(key) := val
+				_ -> {
+					printf('Error: cannot access key {{0}} of {{1}}', key, target)
+				}
+			}
+		}
+		'len' -> if target := stack.pop() {
+			{ type: _, val: _ } -> stack.push(len(target.val))
+			_ -> {
+				printf('Error: cannot get len of {{0}}', target)
+				stack.push(0)
+			}
+		}
+
+		// literals and definitions
+		_ -> if literal?(word) {
+			true -> literal(word) |> stack.push()
+			// TODO: Xi thinks interpreter-defined words like "swap" are
+			// undefined because they don't exist in scope. Solution is
+			// probably to move all builtins to the scope and store as Oak
+			// functions.
+			_ -> if defn := scope.(word) {
+				? -> printf('Error: unknown word "{{0}}"', word)
+				_ -> defn |> eval(stack, scope)
+			}
+		}
+	}
+}
+
+// main
+
+scope := {}
+stack := Stack()
+
+// language prelude
+[
+	// operators
+	'++ : 1 +'
+	'-- : 1 -'
+	'neg : 0 swap -'
+	'zero? : 0 ='
+	'even? : 2 % 0 ='
+	'odd? : 2 % 1 ='
+
+	// stack shuffling
+	'nip : swap drop'
+	'drop2 : drop drop'
+	'dupd : ( dup ) dip'
+	'over : dupd swap'
+	'rot : ( swap ) dip swap'
+
+	// primitive ops
+	'<< : ( dup len  ) dip @:'
+
+	// stdlib
+	// TODO: range?
+] |> with each() fn(stmt) stmt |> parse() |> eval(stack, scope)
+
+with loop() fn(_, break) {
+	print('xi) ')
+	evt := input()
+	if evt.type {
+		:error -> break()
+		_ -> if program := evt.data {
+			'exit' -> break()
+			_ -> program |> parse() |> eval(stack, scope)
+		}
+	}
+}
+
