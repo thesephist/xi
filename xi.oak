@@ -206,17 +206,18 @@ fn eval(words, stack, scope) if words.1 {
 		'>' -> stack.push(stack.pop() < stack.pop())
 		'<=' -> stack.push(stack.pop() >= stack.pop())
 		'>=' -> stack.push(stack.pop() <= stack.pop())
+		'!' -> stack.push(!stack.pop())
 
 		// primitives
-		'if' -> {
+		'?:' -> {
 			ifFalse := stack.pop()
 			ifTrue := stack.pop()
 			stack.push(if cond := stack.pop() {
-				true -> ifTrue |> eval(stack, scope)
-				_ -> ifFalse |> eval(stack, scope)
+				true -> ifTrue
+				_ -> ifFalse
 			})
 		}
-		'apply' -> stack.pop() |> eval(stack, scope)
+		'call' -> stack.pop() |> eval(stack, scope)
 		// array and object functions
 		'@' -> {
 			key := stack.pop()
@@ -275,16 +276,58 @@ stack := Stack()
 
 	// stack shuffling
 	'nip : swap drop'
+	'nipd : ( nip ) dip'
+	'dip2 : swap ( dip ) dip'
+	'dip3 : swap ( dip2 ) dip'
+	'dip4 : swap ( dip3 ) dip'
 	'drop2 : drop drop'
+	'drop3 : drop2 drop'
 	'dupd : ( dup ) dip'
+	'dup2 : over over'
+	'dup3 : pick pick pick'
+	'swapd : ( swap ) dip'
+	// x y -> x y x
 	'over : dupd swap'
-	'rot : ( swap ) dip swap'
+	// x y z -> y z x
+	'rot : swapd swap'
+	// x y z -> z x y
+	'-rot : rot rot'
+	// w x y z -> x y w z
+	'rotd : ( rot ) dip'
+	// w x y z -> y w x z
+	'-rotd : ( -rot ) dip'
+	// x y -> y x y
+	'tuck : dup -rot'
+	// x y z -> z y x
+	'spin : -rot swap'
+	// x y z -> x y z x
+	'pick : rot dup ( -rot ) dip'
+	// w x y z -> w x y w z
+	'pickd : ( pick ) dip'
+	// w x y z -> x y z w
+	'rot4 : ( swap ) dip2 rot'
+	// w x y z -> z w x y
+	'-rot4 : -rot ( swap ) dip2'
+	// w x y z -> w x y z w
+	'reach : pickd swap'
 
 	// primitive ops
 	'<< : ( dup len  ) dip @:'
 
+	// combinators
+	'if : ?: call'
+	'when : ( ) if'
+	'unless : ( ) swap if'
+	'twice : dup ( call ) dip call'
+	'thrice : dup dup ( call ) dip2 ( call ) dip call'
+
 	// stdlib
-	// TODO: range?
+	// TODO: make a..b:c using rot4 to bury the increment in the stack 3 levels deep
+	'--push-into-list-and-incr : dupd ( << ) dip2 ( ++ ) dip'
+	'--iterate-if-less : dup2 < ( --push-into-list-and-incr --iterate-if-less ) ( drop2 ) if'
+	'a..b : [ ] -rot --iterate-if-less'
+	'0..b : 0 swap a..b'
+	'1..b : 1 swap a..b'
 ] |> with each() fn(stmt) stmt |> parse() |> eval(stack, scope)
 
 with loop() fn(_, break) {
