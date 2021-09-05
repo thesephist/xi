@@ -354,6 +354,10 @@ stack := Stack()
 	'map : [ ] -rot ( dup len ) dip swap ( swap ( dupd nth ) dip ( swap ) dip2 dup ( call << swap ) dip ) each-integer drop2'
 	// [x..] quot: ( x -> bool ) -> [x..]
 	'filter : [ ] -rot ( dup len ) dip swap ( swap ( dupd nth ) dip ( swap ) dip2 dup ( dupd call ( << ) ( drop ) if swap ) dip ) each-integer drop2'
+	// [x..] a b [y..] -> [y.. x..]
+	'--sub-slice : pick pick < ( reach reach nth << ( ++ ) dip2 --sub-slice ) ( -rot4 drop3 ) if'
+	// [x..] a b -> [x..]
+	'slice : [ ] --sub-slice'
 
 	// stdlib
 	// c [x..] a b -> c [x.. a] a+=c b

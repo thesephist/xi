@@ -4,6 +4,7 @@
 
 ## Todos
 
+[ ] Unit tests
 [ ] Consider alternative conventional notation: ': << ( x... y -> x...y ) dip @:'
 [ ] Document all words
 [ ] Ability to execute from a file
