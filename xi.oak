@@ -106,7 +106,7 @@ fn parse(program) {
 // toString converts Xi values to string representations suitable for printing
 // in a REPL environment.
 fn toString(word) if type(word) {
-	:list -> '( ' + word |> map(toString) |> join(' ') + ' )'
+	:list -> '( ' + word |> join(' ') + ' )'
 	:object -> if word {
 		{ type: :list, val: _ } -> '[ ' + word.val |> map(toString) |> join(' ') + ' ]'
 		{ type: :object, val: _ } -> '{ ' + word.val |>
@@ -161,7 +161,7 @@ fn eval(words, stack, scope) if words.1 {
 		// introspection
 		'.' -> println(stack.pop() |> toString())
 		'?' -> println('[ ' + stack.items() |> map(toString) |> join(' ') + ' ]')
-		'??' -> println('{\n' + scope |> entries() |> sort!(fn(pair) pair.0)  |> map(fn(pair) {
+		'??' -> println('{\n' + scope |> entries() |> sort!(fn(pair) pair.0) |> map(fn(pair) {
 			[key, val] := pair
 			'  ' + toString(key) + ' : ' + toString(pair)
 		}) |> join('\n') + '\n}')
@@ -219,7 +219,7 @@ fn eval(words, stack, scope) if words.1 {
 		}
 		'call' -> stack.pop() |> eval(stack, scope)
 		// array and object functions
-		'@' -> {
+		'nth' -> {
 			key := stack.pop()
 			if target := stack.pop() {
 				{ type: :list, val: _ } -> stack.push(target.val.(int(key)))
@@ -229,7 +229,7 @@ fn eval(words, stack, scope) if words.1 {
 				}
 			}
 		}
-		'@:' -> {
+		'nth!' -> {
 			val := stack.pop()
 			key := stack.pop()
 			if target := stack.peek() {
@@ -241,7 +241,7 @@ fn eval(words, stack, scope) if words.1 {
 			}
 		}
 		'len' -> if target := stack.pop() {
-			{ type: _, val: _ } -> stack.push(len(target.val))
+			{ type: _, val: _ } -> stack.push(float(len(target.val)))
 			_ -> {
 				printf('Error: cannot get len of {{0}}', target)
 				stack.push(0)
@@ -270,9 +270,14 @@ stack := Stack()
 	'++ : 1 +'
 	'-- : 1 -'
 	'neg : 0 swap -'
+	'abs : dup 0 >= ( ) ( neg ) if'
 	'zero? : 0 ='
 	'even? : 2 % 0 ='
 	'odd? : 2 % 1 ='
+	'max : dup2 > ( drop ) ( nip ) if'
+	'min : dup2 < ( drop ) ( nip ) if'
+	// n factor -> bool
+	'divisible? : % zero?'
 
 	// stack shuffling
 	'nip : swap drop'
@@ -282,17 +287,20 @@ stack := Stack()
 	'dip4 : swap ( dip3 ) dip'
 	'drop2 : drop drop'
 	'drop3 : drop2 drop'
-	'dropd : swap drop'
+	// x y -> x x y
 	'dupd : ( dup ) dip'
+	// x y -> x y x y
 	'dup2 : over over'
+	// x y z -> x y z x y z
 	'dup3 : pick pick pick'
+	// x y z -> y x z
 	'swapd : ( swap ) dip'
 	// x y -> x y x
 	'over : dupd swap'
 	// x y z -> y z x
 	'rot : swapd swap'
 	// x y z -> z x y
-	'-rot : rot rot'
+	'-rot : swap swapd'
 	// w x y z -> x y w z
 	'rotd : ( rot ) dip'
 	// w x y z -> y w x z
@@ -311,28 +319,59 @@ stack := Stack()
 	'-rot4 : -rot ( swap ) dip2'
 	// w x y z -> w x y z w
 	'reach : pickd swap'
+	// x y quot -> quot(x,y) y
+	'keep : over ( call ) dip'
 
 	// primitive ops
-	'<< : ( dup len  ) dip @:'
+	'<< : ( dup len ) dip nth!'
 
 	// combinators
 	'if : ?: call'
+	'if* : ( dup ) dip2 if'
 	'when : ( ) if'
+	'when* : ( ) if*'
 	'unless : ( ) swap if'
+	'unless* : ( ) swap if*'
 	'twice : dup ( call ) dip call'
 	'thrice : dup dup ( call ) dip2 ( call ) dip call'
+	'bi : ( keep ) dip call'
+	'tri : ( ( keep ) dip keep ) dip call'
+	'quad : ( ( ( keep ) dip keep ) dip keep ) dip call'
+
+	// sequencers
+	// [x..] -> bool
+	'empty? : len zero?'
+	// n quot: ( i -> _ ) -> _
+	'--each-integer-sub : pick pick > ( rot ( dup2 ( call ) dip2 ) dip -rot ( ++ ) dip --each-integer-sub ) ( drop3 ) if'
+	'each-integer : 0 swap --each-integer-sub'
+	// [x..] quot: ( x -> _ ) -> _
+	'each : ( dup len ) dip swap ( swap ( dupd nth ) dip tuck call ) each-integer drop2'
+	// [x..] quot: ( acc x -> acc ) acc -> acc
+	'reduce : -rot ( dup len ) dip swap ( swap ( dupd nth ) dip ( swap ) dip2 dup ( call ) dip swapd ) each-integer drop2'
+	// [x..] quot: ( x -> y ) -> [y..]
+	'map : '
+	// [x..] quot: ( x -> bool ) -> [x..]
+	'filter : '
 
 	// stdlib
 	// c [x..] a b -> c [x.. a] a+=c b
 	'--push-into-list-and-incr : dupd ( << ) dip2 ( pick + ) dip'
 	// c [x..] a b -> [x..b:c]
-	'--iterate-if-less : dup2 < ( --push-into-list-and-incr --iterate-if-less ) ( drop2 dropd ) if'
+	'--iterate-if-less : dup2 < ( --push-into-list-and-incr --iterate-if-less ) ( drop2 nip ) if'
 	// a b c -> [a..b:c]
 	'a..b:c : -rot [ ] -rot --iterate-if-less'
 	// a b -> [a..b:1]
 	'a..b : 1 a..b:c'
 	'0..b : 0 swap a..b'
 	'1..b : 1 swap a..b'
+
+	// fizzbuzz (example)
+	// n -> _
+	'fizz-n : dup 15 divisible? ( \'FizzBuzz\' . drop ) ( dup 3 divisible? ( \'Fizz\' . drop ) ( dup 5 divisible? ( \'Buzz\' . drop ) ( . ) if ) if ) if'
+	// max -> _
+	'fizzbuzz : ++ 1..b ( fizz-n ) each'
+	// n -> factorial(n)
+	'factorial : ++ 1..b ( * ) 1 reduce'
 ] |> with each() fn(stmt) stmt |> parse() |> eval(stack, scope)
 
 with loop() fn(_, break) {
