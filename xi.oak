@@ -274,6 +274,8 @@ stack := Stack()
 	'zero? : 0 ='
 	'even? : 2 % 0 ='
 	'odd? : 2 % 1 ='
+	'pos? : 0 >'
+	'neg? : 0 <'
 	'max : dup2 > ( drop ) ( nip ) if'
 	'min : dup2 < ( drop ) ( nip ) if'
 	// n factor -> bool
@@ -349,9 +351,9 @@ stack := Stack()
 	// [x..] quot: ( acc x -> acc ) acc -> acc
 	'reduce : -rot ( dup len ) dip swap ( swap ( dupd nth ) dip ( swap ) dip2 dup ( call ) dip swapd ) each-integer drop2'
 	// [x..] quot: ( x -> y ) -> [y..]
-	'map : '
+	'map : [ ] -rot ( dup len ) dip swap ( swap ( dupd nth ) dip ( swap ) dip2 dup ( call << swap ) dip ) each-integer drop2'
 	// [x..] quot: ( x -> bool ) -> [x..]
-	'filter : '
+	'filter : [ ] -rot ( dup len ) dip swap ( swap ( dupd nth ) dip ( swap ) dip2 dup ( dupd call ( << ) ( drop ) if swap ) dip ) each-integer drop2'
 
 	// stdlib
 	// c [x..] a b -> c [x.. a] a+=c b
