@@ -9,6 +9,8 @@
 	map: map
 	each: each
 	filter: filter
+	reduce: reduce
+	flatten: flatten
 	every: every
 	partition: partition
 	entries: entries
@@ -26,7 +28,12 @@
 {
 	printf: printf
 } := import('fmt')
+fs := import('fs')
+cli := import('cli')
 
+// Stack implements a simple LIFO stack to be used as the data stack for Xi
+// programs. It also implements a peek() operation to look at the topmost item
+// on the stack.
 fn Stack {
 	// buffer backing the stack
 	mem := []
@@ -58,9 +65,30 @@ fn Stack {
 	}
 }
 
+// tokenize splits a line of Xi program into valid tokens, which are
+// punctuations separated by space or string literals or numbers/booleans.
+// Returns a list of strings.
+fn tokenize(program) program |> split('\'') |> map(fn(part, i) if i % 2 {
+	// odd items are string content
+	1 -> ['\'' << part << '\'']
+	// even items are normal tokens
+	_ -> part |> split(' ')
+}) |> flatten() |> with filter() fn(s) s |> trim() != ''
+
+// parse translates a line of Xi program into "AST nodes" which are really just
+// nested lists of strings. It accounts for nesting in quotations ( ), lists, [
+// ], and objects { }.
+// For example, it converts 'xyz ( 1 2 ) abc' -> ['xyz', ['1', '2'], 'abc']
+//
+// parse produces special composite literal nodes to represent lists and
+// objects, that have the form:
+// {
+//   type: :list (or :object)
+//   val: <Oak value, list or object>
+// }
 fn parse(program) {
 	index := 0
-	tokens := program |> split(' ') |> with filter() fn(s) s |> trim() != ''
+	tokens := program |> tokenize()
 
 	fn parseTokens(stmts) if index >= len(tokens) {
 		true -> stmts
@@ -122,7 +150,10 @@ fn toString(word) if type(word) {
 	_ -> string(word)
 }
 
-fn number?(s) s |> split() |> with every() fn(c) c = '.' | digit?(c)
+// number? reports whether a string is a valid Oak (and Xi) number
+fn number?(s) float(s) != ?
+// str? reports whether a string is a valid Xi string literal. Note that Xi
+// string literals are pretty dumb -- you can't escape quotes, for example.
 fn str?(s) s.0 = '\'' & s.(len(s) - 1) = '\''
 
 // literal? reports whether a parsed word represents a Xi value literal
@@ -139,28 +170,40 @@ fn literal?(word) if {
 	_ -> false
 }
 
+// literal translates a Xi literal token into a Xi value
 fn literal(word) if {
 	type(word) = :list -> word
 	word = { type: :list, val: _ } -> {
 		type: :list
 		val: word.val |> map(literal)
 	}
-	// TODO: evaluate each key, value
-	word = { type: :object, val: _ } -> word
+	word = { type: :object, val: _ } -> {
+		type: :object
+		val: word.val |> entries() |> with reduce({}) fn(o, entry) {
+			[key, val] := entry
+			o.(literal(key)) := literal(val)
+		}
+	}
 	number?(word) -> float(word)
 	str?(word) -> word |> slice(1, len(word) - 1)
 	word = 'true' -> true
 	word = 'false' -> false
 }
 
-fn eval(words, stack, scope) if words.1 {
+// eval evaluates a list of words (a line of Xi program) against a stack and a
+// scope. The stack is used as the data stack, and the scope is used to store
+// user-defined words. eval does not return anything meaningful, and instead
+// mutates the stack.
+fn eval(words, stack, scope) if {
+	// comment
+	words.0 = '//' -> ?
 	// define a new word
-	':' -> scope.(words.0) := words |> slice(2)
+	words.1 = ':' -> scope.(words.0) := words |> slice(2)
 	// evaluate a statement
 	_ -> words |> with each() fn(word) if word {
 		// introspection
 		'.' -> println(stack.pop() |> toString())
-		'?' -> println('[ ' + stack.items() |> map(toString) |> join(' ') + ' ]')
+		'?' -> println('< ' + stack.items() |> map(toString) |> join(' ') + ' >')
 		'??' -> println('{\n' + scope |> entries() |> sort!(fn(pair) pair.0) |> map(fn(pair) {
 			[key, val] := pair
 			'  ' + toString(key) + ' : ' + toString(pair)
@@ -184,12 +227,18 @@ fn eval(words, stack, scope) if words.1 {
 		'clear' -> stack.clear()
 
 		// operators
-		'+' -> stack.push(stack.pop() + stack.pop())
+		'+' -> stack.push({
+			tmp := stack.pop()
+			stack.pop() + tmp
+		})
 		'-' -> stack.push({
 			tmp := stack.pop()
 			stack.pop() - tmp
 		})
-		'*' -> stack.push(stack.pop() * stack.pop())
+		'*' -> stack.push({
+			tmp := stack.pop()
+			stack.pop() * tmp
+		})
 		'/' -> stack.push({
 			tmp := stack.pop()
 			stack.pop() / tmp
@@ -218,7 +267,7 @@ fn eval(words, stack, scope) if words.1 {
 			})
 		}
 		'call' -> stack.pop() |> eval(stack, scope)
-		// array and object functions
+		// list and object functions
 		'nth' -> {
 			key := stack.pop()
 			if target := stack.pop() {
@@ -247,6 +296,10 @@ fn eval(words, stack, scope) if words.1 {
 				stack.push(0)
 			}
 		}
+		'print' -> if type(word := stack.pop()) {
+			:string -> println(word)
+			_ -> println(word |> toString())
+		}
 
 		// literals and definitions
 		_ -> if literal?(word) {
@@ -265,8 +318,12 @@ scope := {}
 stack := Stack()
 
 // language prelude
+//
+// The prelude defines the "kernel" of Xi, the equivalent of Factor's
+// kernel.factor. The stack effect of each definition is commented above each
+// definition line.
 [
-	// operators
+	// arithmetic
 	'++ : 1 +'
 	'-- : 1 -'
 	'neg : 0 swap -'
@@ -326,14 +383,17 @@ stack := Stack()
 
 	// primitive ops
 	'<< : ( dup len ) dip nth!'
+	// put top N items in stack into a new list
+	'list : [ ] swap <<'
+	'list2 : ( list ) dip <<'
+	'list3 : ( list2 ) dip <<'
+	'list4 : ( list3 ) dip <<'
+	'list5 : ( list4 ) dip <<'
 
 	// combinators
 	'if : ?: call'
-	'if* : ( dup ) dip2 if'
 	'when : ( ) if'
-	'when* : ( ) if*'
 	'unless : ( ) swap if'
-	'unless* : ( ) swap if*'
 	'twice : dup ( call ) dip call'
 	'thrice : dup dup ( call ) dip2 ( call ) dip call'
 	'bi : ( keep ) dip call'
@@ -358,6 +418,10 @@ stack := Stack()
 	'--sub-slice : pick pick < ( reach reach nth << ( ++ ) dip2 --sub-slice ) ( -rot4 drop3 ) if'
 	// [x..] a b -> [x..]
 	'slice : [ ] --sub-slice'
+	// [x..] -> sum
+	'sum : ( + ) 0 reduce'
+	// [x..] -> prod
+	'prod : ( * ) 1 reduce'
 
 	// stdlib
 	// c [x..] a b -> c [x.. a] a+=c b
@@ -370,24 +434,47 @@ stack := Stack()
 	'a..b : 1 a..b:c'
 	'0..b : 0 swap a..b'
 	'1..b : 1 swap a..b'
-
-	// fizzbuzz (example)
-	// n -> _
-	'fizz-n : dup 15 divisible? ( \'FizzBuzz\' . drop ) ( dup 3 divisible? ( \'Fizz\' . drop ) ( dup 5 divisible? ( \'Buzz\' . drop ) ( . ) if ) if ) if'
-	// max -> _
-	'fizzbuzz : ++ 1..b ( fizz-n ) each'
-	// n -> factorial(n)
-	'factorial : ++ 1..b ( * ) 1 reduce'
+	// n -> [1,n)
+	'seq : 0..b'
+	// n -> [1,n]
+	'nat : ++ 1..b'
 ] |> with each() fn(stmt) stmt |> parse() |> eval(stack, scope)
 
-with loop() fn(_, break) {
-	print('xi) ')
-	evt := input()
-	if evt.type {
-		:error -> break()
-		_ -> if program := evt.data {
-			'exit' -> break()
-			_ -> program |> parse() |> eval(stack, scope)
+Help := 'Xi is a minimal stack-based concatenative stack language.
+
+Usage
+	./xi.oak --help OR -h
+	        Show this help message
+	./xi.oak
+	        Start an interactive REPL
+	./xi.oak <filename>
+	        Run a Xi program from a source file
+
+See also: github.com/thesephsit/xi
+'
+
+Cli := cli.parse()
+if [Cli.opts.help, Cli.opts.h] {
+	[true, _], [_, true] -> println(Help)
+	_ -> if filePath := Cli.verb {
+		// run as REPL
+		? -> with loop() fn(_, break) {
+			print('xi) ')
+			evt := input()
+			if evt.type {
+				:error -> break()
+				_ -> if program := evt.data |> trim() {
+					'exit' -> break()
+					_ -> program |> parse() |> eval(stack, scope)
+				}
+			}
+		}
+		// run from file
+		_ -> with fs.readFile(filePath) fn(file) if file {
+			? -> printf('Could not read file "{{0}}"\n', filePath)
+			_ -> file |> split('\n') |> with each() fn(line) {
+				line |> parse() |> eval(stack, scope)
+			}
 		}
 	}
 }
