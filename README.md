@@ -2,7 +2,11 @@
 
 **Xi** is a dynamic, stack-based concatenative language, written in [Oak](https://oaklang.org/) and using Oak types and semantics. I wrote Xi over the 2021 Labor Day weekend as a learing exercise to understand how stack languages work and why they're interesting. Xi is modeled largely after [Factor](https://factorcode.org/), but this implementation is neither complete nor robust -- there's basically no error handling, for example. It should run correct programs correctly, but otherwise, try at your own risk.
 
+I've written more in-depth about my experiments with concatenative languages on my blog at [dotink.co](https://dotink.co/posts/xi/).
+
 ## Overview
+
+// TODO
 
 ## Examples
 

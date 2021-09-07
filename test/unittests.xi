@@ -2,7 +2,7 @@
 
 // asserts that the top two things on the stack are equal
 // a b -> _
-assert! : rot pick pick = ( '  ' swap + ': ok' + print ) ( '! ' swap + ': failed, results below:' + print ? ) if drop2
+assert! : rot pick pick = ( '  ' swap + ': ok' + print ) ( '! ' swap + ': failed, results below:' + print .s ) if drop2
 
 // asserts whether results of top two quotations on stack are the same to N
 // depths in stack
@@ -33,7 +33,7 @@ eq5! : ( call list5 ) dip call list5 assert!
 'keep' ( 20 30 ( * ) keep ) ( 600 30 ) eq2!
 
 // control flow
-'?: for ternary choice' ( true 10 100 ?: false 20 200 ?: ) ( 10 200 ) eq2!
+'? for ternary choice' ( true 10 100 ? false 20 200 ? ) ( 10 200 ) eq2!
 'if conditional' ( 10 true ( 20 + ) ( 50 + ) if ) ( 30 ) eq!
 'when conditional' ( 10 true ( 20 + ) when false ( 100 * ) when ) ( 30 ) eq!
 'unless conditional' ( 10 true ( 20 + ) unless false ( 100 * ) unless ) ( 1000 ) eq!
@@ -67,5 +67,5 @@ square : dup *
 'generic a..b:c' ( 2 20 3 a..b:c ) ( [ 2 5 8 11 14 17 ] ) eq!
 'seq, nat' ( 5 ( seq ) ( nat ) bi ) ( [ 0 1 2 3 4 ] [ 1 2 3 4 5 ] ) eq2!
 
-'Final stack (should be empty):' print ?
+'Final stack (should be empty):' print .s
 

@@ -134,7 +134,7 @@ fn parse(program) {
 // toString converts Xi values to string representations suitable for printing
 // in a REPL environment.
 fn toString(word) if type(word) {
-	:list -> '( ' + word |> join(' ') + ' )'
+	:list -> '( ' + word |> map(toString) |> join(' ') + ' )'
 	:object -> if word {
 		{ type: :list, val: _ } -> '[ ' + word.val |> map(toString) |> join(' ') + ' ]'
 		{ type: :object, val: _ } -> '{ ' + word.val |>
@@ -203,10 +203,12 @@ fn eval(words, stack, scope) if {
 	_ -> words |> with each() fn(word) if word {
 		// introspection
 		'.' -> println(stack.pop() |> toString())
-		'?' -> println('< ' + stack.items() |> map(toString) |> join(' ') + ' >')
-		'??' -> println('{\n' + scope |> entries() |> sort!(fn(pair) pair.0) |> map(fn(pair) {
+		// .s for stack, following the Factor convention
+		'.s' -> println('< ' + stack.items() |> map(toString) |> join(' ') + ' >')
+		// .e for environment, for the local lexical environment
+		'.e' -> println('{\n' + scope |> entries() |> sort!(fn(pair) pair.0) |> map(fn(pair) {
 			[key, val] := pair
-			'  ' + toString(key) + ' : ' + toString(pair)
+			'  ' + key + ' : ' + toString(val)
 		}) |> join('\n') + '\n}')
 
 		// stack manipulation
@@ -258,7 +260,7 @@ fn eval(words, stack, scope) if {
 		'!' -> stack.push(!stack.pop())
 
 		// primitives
-		'?:' -> {
+		'?' -> {
 			ifFalse := stack.pop()
 			ifTrue := stack.pop()
 			stack.push(if cond := stack.pop() {
@@ -391,7 +393,7 @@ stack := Stack()
 	'list5 : ( list4 ) dip <<'
 
 	// combinators
-	'if : ?: call'
+	'if : ? call'
 	'when : ( ) if'
 	'unless : ( ) swap if'
 	'twice : dup ( call ) dip call'
@@ -404,8 +406,10 @@ stack := Stack()
 	// [x..] -> bool
 	'empty? : len zero?'
 	// n quot: ( i -> _ ) -> _
-	'--each-integer-sub : pick pick > ( rot ( dup2 ( call ) dip2 ) dip -rot ( ++ ) dip --each-integer-sub ) ( drop3 ) if'
-	'each-integer : 0 swap --each-integer-sub'
+	'(each-integer) : pick pick > ( rot ( dup2 ( call ) dip2 ) dip -rot ( ++ ) dip (each-integer) ) ( drop3 ) if'
+	// Takes a number N and a quotation and calls the quotation N times, each
+	// time with the iteration count counting up from 0
+	'each-integer : 0 swap (each-integer)'
 	// [x..] quot: ( x -> _ ) -> _
 	'each : ( dup len ) dip swap ( swap ( dupd nth ) dip tuck call ) each-integer drop2'
 	// [x..] quot: ( acc x -> acc ) acc -> acc
@@ -415,9 +419,9 @@ stack := Stack()
 	// [x..] quot: ( x -> bool ) -> [x..]
 	'filter : [ ] -rot ( dup len ) dip swap ( swap ( dupd nth ) dip ( swap ) dip2 dup ( dupd call ( << ) ( drop ) if swap ) dip ) each-integer drop2'
 	// [x..] a b [y..] -> [y.. x..]
-	'--sub-slice : pick pick < ( reach reach nth << ( ++ ) dip2 --sub-slice ) ( -rot4 drop3 ) if'
+	'(slice) : pick pick < ( reach reach nth << ( ++ ) dip2 (slice) ) ( -rot4 drop3 ) if'
 	// [x..] a b -> [x..]
-	'slice : [ ] --sub-slice'
+	'slice : [ ] (slice)'
 	// [x..] -> sum
 	'sum : ( + ) 0 reduce'
 	// [x..] -> prod
@@ -425,11 +429,11 @@ stack := Stack()
 
 	// stdlib
 	// c [x..] a b -> c [x.. a] a+=c b
-	'--push-into-list-and-incr : dupd ( << ) dip2 ( pick + ) dip'
+	'(push-into-list-and-incr) : dupd ( << ) dip2 ( pick + ) dip'
 	// c [x..] a b -> [x..b:c]
-	'--iterate-if-less : dup2 < ( --push-into-list-and-incr --iterate-if-less ) ( drop2 nip ) if'
+	'(iterate-if-less) : dup2 < ( (push-into-list-and-incr) (iterate-if-less) ) ( drop2 nip ) if'
 	// a b c -> [a..b:c]
-	'a..b:c : -rot [ ] -rot --iterate-if-less'
+	'a..b:c : -rot [ ] -rot (iterate-if-less)'
 	// a b -> [a..b:1]
 	'a..b : 1 a..b:c'
 	'0..b : 0 swap a..b'
