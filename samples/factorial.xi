@@ -1,8 +1,8 @@
-// Factorial in Xi
+// Factorial
 
 // n -> factorial(n)
 factorial : nat prod
 
 // main
-10 nat ( factorial ) map ( print ) each
+10 ( ++ factorial print ) each-integer
 
