@@ -1,6 +1,6 @@
 # Xi 🗼
 
-**Xi** is a dynamic, stack-based concatenative language, written in [Oak](https://oaklang.org/) and using Oak types and semantics. I wrote Xi over the 2021 Labor Day weekend as a learning exercise to understand how stack languages work and why they're interesting. Xi is modeled mainly after [Factor](https://factorcode.org/), but this implementation is neither complete nor robust -- there's basically no error handling, for example, and Xi is not meant to be a faithful _re-implementation_ of Factor. It should run correct programs correctly, but will often fail on bad input.
+**Xi** (pronounced _Zai_) is a dynamic, stack-based concatenative language, written in [Oak](https://oaklang.org/) and using Oak types and semantics. I wrote Xi over the 2021 Labor Day weekend as a learning exercise to understand how stack languages work and why they're interesting. Xi is modeled mainly after [Factor](https://factorcode.org/), but this implementation is neither complete nor robust -- there's basically no error handling, for example, and Xi is not meant to be a faithful _re-implementation_ of Factor. It should run correct programs correctly, but will often fail on bad input.
 
 ```js
 // Factorials to 10!
@@ -39,7 +39,7 @@ We can also write these words all next to each other, and have the same program.
 
 This is where the name _concatenative_ language comes from -- putting words next to each other composes those functions together in a predictable way.
 
-Sometimes, we need to shuffle some items in the stack around to work on the right values without doing any other computation. These are called _stack manipulation_ words. Xi provides 4 basic ones, from which more complex words can be defined:
+Sometimes, we need to shuffle some items in the stack around to work on the right values without doing any other computation. These are called _stack shuffling_ words. Xi provides 4 basic ones, from which more complex words can be defined:
 
 ```js
 2 dup
@@ -70,18 +70,18 @@ Xi's syntax is, like most concatenative languages, minimal. There are three kind
 
 Xi is a learning project, and thus not a great introduction to concatenative programming if you're new to it yourself. If you want to learn more about concatenative programming, you might want to check out these resources I found helpful as I learned about this space myself.
 
-- [A panoramic tour of Factor](https://andreaferretti.github.io/factor-tutorial/), which is the most beginner-friendly treatment of Factor and concatenative programming I could find.
-- [A survey of stack shufflers](http://useless-factor.blogspot.com/2007/09/survey-of-stack-shufflers.html), which helped me get a better sense of how to use stack manipulating words, and how to "think in Factor", i.e. think about programming by composing words together
+- [A panoramic tour of Factor](https://andreaferretti.github.io/factor-tutorial/), which is the most beginner-friendly treatment of Factor and concatenative programming I could find
+- [A survey of stack shufflers](http://useless-factor.blogspot.com/2007/09/survey-of-stack-shufflers.html), which helped me get a better sense of how to use stack shuffling words, and how to "think in Factor", i.e. think about programming by composing words together
 - [Google TechTalk on Factor by its creator Slava Pestov](https://www.youtube.com/watch?v=f_0QlhYlS8g), which gives a great high-level overview of what makes concatenative programming and Factor attractive
-- [Bare metal x86 Forth](https://ph1lter.bitbucket.io/blog/2021-01-15-baremetal-x86-forth.html), an advanced and insightful deep dive into bootstrapping a concatenative programming language from assembly.
+- [Bare metal x86 Forth](https://ph1lter.bitbucket.io/blog/2021-01-15-baremetal-x86-forth.html), an advanced and insightful deep dive into bootstrapping a concatenative programming language from assembly
 
 ### Xi repl
 
-Xi has a basic repl, which I used to test and debug words before adding them to my programs. Simply running `./xi.oak` without any arguments will start the repl. Through the repl, you can run any Xi code. However, there are a few specific "debugging words" that are useful to inspect program state when in the repl.
+Xi has a basic repl, which I used to test and debug words before adding them to my programs. Simply running `./xi.oak` without any arguments will start the repl. Through the repl, you can run any Xi code. However, there are a few specific "debugging words" that are useful for inspecting program state when in the repl.
 
 - `.` will pop the top value off of the stack and print it out.
 - `.s` ("s" for "stack") will print out a representation of the entire data stack at that point in the program
-- `.e` ("e" for "environment") will print out a dictionary of every defined word currently in scope, to their definitions
+- `.e` ("e" for "environment") will print out a dictionary of every word currently defined in scope and their definitions
 
 ## Examples
 
@@ -118,11 +118,11 @@ Here, the word `fizzbuzz` consumes a number at the top of the data stack and pri
 ./xi.oak ./samples/fizzbuzz.xi
 ```
 
-Should produce the correct output.
+should produce the correct output.
 
 ### Factorial
 
-The sample ['./samples/factorial.xi'](samples/factorial.xi) computes factorials of every number from 1 to 10, inclusive, and prints it. This program is a great demonstration of how elegant and concise well-designed concatenative programs can be, if the right primitives are composed well. This program is just two short lines:
+The sample [`./samples/factorial.xi`](samples/factorial.xi) computes factorials of every number from 1 to 10, inclusive, and prints it. This program is a great demonstration of how elegant and concise well-designed concatenative programs can be, if the right primitives are composed well. This program is just two short lines:
 
 ```js
 factorial : nat prod
