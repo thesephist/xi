@@ -139,10 +139,7 @@ fn toString(word) if type(word) {
 		{ type: :list, val: _ } -> '[ ' + word.val |> map(toString) |> join(' ') + ' ]'
 		{ type: :object, val: _ } -> '{ ' + word.val |>
 			entries() |>
-			map(fn(entry) {
-				[key, val] := entry
-				toString(key) + ' ' + toString(val)
-			}) |>
+			map(fn(entry) toString(entry.key) << ' ' << toString(entry.val)) |>
 			join(' ') + ' }'
 	}
 	:int, :float -> string(word)
@@ -208,7 +205,7 @@ fn eval(words, stack, scope) if {
 		// .e for environment, for the local lexical environment
 		'.e' -> println('{\n' + scope |> entries() |> sort!(fn(pair) pair.0) |> map(fn(pair) {
 			[key, val] := pair
-			'  ' + key + ' : ' + toString(val)
+			'  ' << key << ' : ' << toString(val)
 		}) |> join('\n') + '\n}')
 
 		// stack manipulation
@@ -454,7 +451,7 @@ Usage
 	./xi.oak <filename>
 	        Run a Xi program from a source file
 
-See also: github.com/thesephsit/xi
+See also: github.com/thesephist/xi
 '
 
 Cli := cli.parse()
