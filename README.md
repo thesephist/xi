@@ -13,7 +13,7 @@ fib : 1 1 rot (fib)
 25 ( fib print ) each-integer
 ```
 
-I've written more in-depth about my experiments with concatenative languages on my blog at [dotink.co](https://dotink.co/posts/xi/).
+I've written more in-depth about my experiments with concatenative languages on [the Oak blog](https://oaklang.org/posts/xi/).
 
 ## Overview
 
